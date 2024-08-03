@@ -4,6 +4,9 @@
 
 This project involves formal specification and model checking of an autonomous vehicle merging protocol using PRISM model checker. The goal is to evaluate the protocol's performance and safety under varying traffic conditions by modeling different numbers of through and non-through lane vehicles.
 
+### Note:
+The protocol used as a reference for this project is derived from the paper **"Formal Specification and Model Checking of an Autonomous Vehicle Merging Protocol"** authored by Minxuan Liu, Dang Duy Bui, Duong Dinh Tran and Kazuhiro Ogata. The original protocol was specified and analyzed using the Maude system. Please take a look at this [paper](https://github.com/user-attachments/files/16477868/Formal_Specification_and_Model_Checking_of_an_Autonomous_Vehicle_Merging_Protocol.pdf) for a comprehensive understanding of the protocol's functionality and details.
+
 ## Models
 
 I have generated models for varying numbers of through lane and non-through lane vehicles, ranging from 1 to 8. This results in a total of 8x8 models.
