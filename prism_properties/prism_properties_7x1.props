@@ -1,0 +1,5 @@
+P=? [ F "simultaneous_crossing" ]
+P=? [ F "termination" ]
+P=? [ F (throughQueue=maxQueueSize) ]
+P=? [ F<=50 (v0=crossedStatus & v1=crossedStatus & v2=crossedStatus & v3=crossedStatus & v4=crossedStatus & v5=crossedStatus & v6=crossedStatus&(v7!=crossedStatus)) ]
+R{"waiting_time_first"}=? [ C<=50 ]

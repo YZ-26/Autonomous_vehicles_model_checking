@@ -1,0 +1,350 @@
+dtmc
+
+// Define constants
+const int maxQueueSize = 9;
+const int congestionThreshold = 3;
+
+// Define vehicle statuses as integer values
+const int runningStatus = 0;
+const int approachingStatus = 1;
+const int stoppedStatus = 2;
+const int crossingStatus = 3;
+const int crossedStatus = 4;
+const int unspaceStatus = 5;
+const int spaceStatus = 6;
+const int yieldStatus = 7;
+
+// Global variables for vehicle queues and status flags
+global throughQueue : [0..maxQueueSize] init 1;
+global nonThroughQueue : [0..maxQueueSize] init 0;
+global mode : [0..1] init 0; // 0 = prioritized, 1 = fair
+global isCrossing : bool init false;
+global turn : [0..1] init 0; // 0 = through, 1 = nonThrough
+global dPos : [0..4] init 0; // Dummy vehicle position
+global CountPos : [0..9] init 0; // Number of Through lane cars crossed
+global dummyFirst : bool init true; // Flag to ensure dummy vehicle moves first
+
+// Formula for the total number of vehicles in queues
+formula ucvs = throughQueue + nonThroughQueue;
+
+// First vehicle on through lanes
+module Vehicle0
+
+    v0 : [0..7] init approachingStatus; // Set it to approaching to check for termination label, since we need at least 1 vh in queue
+
+    // Approaching transition
+    // [] !dummyFirst & v0 = runningStatus & throughQueue < maxQueueSize -> (v0' = approachingStatus) & (throughQueue' = throughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] !dummyFirst & v0 = approachingStatus & (mode = 0 | nonThroughQueue = 0) & !isCrossing -> (v0' = crossingStatus) & (isCrossing' = true);
+    [] !dummyFirst & v0 = approachingStatus & ( mode = 1 & turn = 0) & !isCrossing -> (v0' = crossingStatus) & (isCrossing' = true) & (turn' = 1);
+
+    // Stopping transition
+    [] v0 = approachingStatus & isCrossing -> (v0' = stoppedStatus);
+
+    // Entering transition
+    [] v0 = stoppedStatus & mode = 0 & !isCrossing -> (v0' = crossingStatus) & (isCrossing' = true);
+    [] v0 = stoppedStatus & mode = 1 & turn = 0 & !isCrossing -> (v0' = crossingStatus) & (turn' = 1) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v0 = crossingStatus & throughQueue > 0 & CountPos < 9 -> (v0' = crossedStatus) & (isCrossing' = false) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+
+endmodule
+
+module Vehicle1
+
+    v1 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v1 = runningStatus & throughQueue < maxQueueSize -> (v1' = approachingStatus) & (throughQueue' = throughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v1 = approachingStatus & (mode = 0 | nonThroughQueue = 0) & !isCrossing & v0 = crossedStatus -> (v1' = crossingStatus) & (isCrossing' = true);
+    [] v1 = approachingStatus & ( mode = 1 & turn = 0) & !isCrossing & v0 = crossedStatus -> (v1' = crossingStatus) & (isCrossing' = true) & (turn' = 1);
+
+    // Stopping transition
+    [] v1 = approachingStatus & ((v0 = stoppedStatus | v0 = crossingStatus) | (isCrossing & v0 = crossedStatus)) -> (v1' = stoppedStatus);
+
+    // Entering transition
+    [] v1 = stoppedStatus & mode = 0 & !isCrossing & v0 = crossedStatus -> (v1' = crossingStatus) & (isCrossing' = true);
+    [] v1 = stoppedStatus & mode = 1 & turn = 0 & !isCrossing & v0 = crossedStatus -> (v1' = crossingStatus) & (turn' = 1) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v1 = crossingStatus & throughQueue > 0 & CountPos < 9 -> (v1' = crossedStatus) & (isCrossing' = false) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+
+endmodule
+
+module Vehicle2
+
+    v2 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v2 = runningStatus & throughQueue < maxQueueSize -> (v2' = approachingStatus) & (throughQueue' = throughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v2 = approachingStatus & (mode = 0 | nonThroughQueue = 0) & !isCrossing & v1 = crossedStatus -> (v2' = crossingStatus) & (isCrossing' = true);
+    [] v2 = approachingStatus & ( mode = 1 & turn = 0) & !isCrossing & v1 = crossedStatus -> (v2' = crossingStatus) & (isCrossing' = true) & (turn' = 1);
+
+    // Stopping transition
+    [] v2 = approachingStatus & ((v1 = stoppedStatus | v1 = crossingStatus) | (isCrossing & v1 = crossedStatus)) -> (v2' = stoppedStatus);
+
+    // Entering transition
+    [] v2 = stoppedStatus & mode = 0 & !isCrossing & v1 = crossedStatus -> (v2' = crossingStatus) & (isCrossing' = true);
+    [] v2 = stoppedStatus & mode = 1 & turn = 0 & !isCrossing & v1 = crossedStatus -> (v2' = crossingStatus) & (turn' = 1) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v2 = crossingStatus & throughQueue > 0 & CountPos < 9 -> (v2' = crossedStatus) & (isCrossing' = false) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+
+endmodule
+
+module Vehicle3
+
+    v3 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v3 = runningStatus & throughQueue < maxQueueSize -> (v3' = approachingStatus) & (throughQueue' = throughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v3 = approachingStatus & (mode = 0 | nonThroughQueue = 0) & !isCrossing & v2 = crossedStatus -> (v3' = crossingStatus) & (isCrossing' = true);
+    [] v3 = approachingStatus & ( mode = 1 & turn = 0) & !isCrossing & v2 = crossedStatus -> (v3' = crossingStatus) & (isCrossing' = true) & (turn' = 1);
+
+    // Stopping transition
+    [] v3 = approachingStatus & ((v2 = stoppedStatus | v2 = crossingStatus) | (isCrossing & v2 = crossedStatus)) -> (v3' = stoppedStatus);
+
+    // Entering transition
+    [] v3 = stoppedStatus & mode = 0 & !isCrossing & v2 = crossedStatus -> (v3' = crossingStatus) & (isCrossing' = true);
+    [] v3 = stoppedStatus & mode = 1 & turn = 0 & !isCrossing & v2 = crossedStatus -> (v3' = crossingStatus) & (turn' = 1) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v3 = crossingStatus & throughQueue > 0 & CountPos < 9 -> (v3' = crossedStatus) & (isCrossing' = false) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+
+endmodule
+
+// First vehicle on non-through lanes
+module Vehicle4
+
+    v4 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v4 = runningStatus & nonThroughQueue < maxQueueSize -> (v4' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v4 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing -> (v4' = crossingStatus) & (isCrossing' = true);
+    [] v4 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing -> (v4' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [stopped] v4 = approachingStatus & isCrossing -> (v4' = stoppedStatus);
+
+    // Entering transition
+    [] v4 = stoppedStatus & mode = 0 & !isCrossing -> (v4' = crossingStatus) & (isCrossing' = true);
+    [] v4 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing -> (v4' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v4 = crossingStatus & nonThroughQueue > 0 -> (v4' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+module Vehicle5
+
+    v5 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v5 = runningStatus & nonThroughQueue < maxQueueSize -> (v5' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v5 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing & v4 = crossedStatus -> (v5' = crossingStatus) & (isCrossing' = true);
+    [] v5 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing & v4 = crossedStatus -> (v5' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [] v5 = approachingStatus & ((isCrossing & v4 = crossedStatus) | (v4 = stoppedStatus | v4 = crossingStatus)) -> (v5' = stoppedStatus);
+
+    // Entering transition
+    [] v5 = stoppedStatus & mode = 0 & !isCrossing & v4 = crossedStatus -> (v5' = crossingStatus) & (isCrossing' = true);
+    [] v5 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing & v4 = crossedStatus -> (v5' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v5 = crossingStatus & nonThroughQueue > 0 -> (v5' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+module Vehicle6
+
+    v6 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v6 = runningStatus & nonThroughQueue < maxQueueSize -> (v6' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v6 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing & v5 = crossedStatus -> (v6' = crossingStatus) & (isCrossing' = true);
+    [] v6 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing & v5 = crossedStatus -> (v6' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [] v6 = approachingStatus & ((isCrossing & v5 = crossedStatus) | (v5 = stoppedStatus | v5 = crossingStatus)) -> (v6' = stoppedStatus);
+
+    // Entering transition
+    [] v6 = stoppedStatus & mode = 0 & !isCrossing & v5 = crossedStatus -> (v6' = crossingStatus) & (isCrossing' = true);
+    [] v6 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing & v5 = crossedStatus -> (v6' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v6 = crossingStatus & nonThroughQueue > 0 -> (v6' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+module Vehicle7
+
+    v7 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v7 = runningStatus & nonThroughQueue < maxQueueSize -> (v7' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v7 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing & v6 = crossedStatus -> (v7' = crossingStatus) & (isCrossing' = true);
+    [] v7 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing & v6 = crossedStatus -> (v7' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [] v7 = approachingStatus & ((isCrossing & v6 = crossedStatus) | (v6 = stoppedStatus | v6 = crossingStatus)) -> (v7' = stoppedStatus);
+
+    // Entering transition
+    [] v7 = stoppedStatus & mode = 0 & !isCrossing & v6 = crossedStatus -> (v7' = crossingStatus) & (isCrossing' = true);
+    [] v7 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing & v6 = crossedStatus -> (v7' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v7 = crossingStatus & nonThroughQueue > 0 -> (v7' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+module Vehicle8
+
+    v8 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v8 = runningStatus & nonThroughQueue < maxQueueSize -> (v8' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v8 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing & v7 = crossedStatus -> (v8' = crossingStatus) & (isCrossing' = true);
+    [] v8 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing & v7 = crossedStatus -> (v8' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [] v8 = approachingStatus & ((isCrossing & v7 = crossedStatus) | (v7 = stoppedStatus | v7 = crossingStatus)) -> (v8' = stoppedStatus);
+
+    // Entering transition
+    [] v8 = stoppedStatus & mode = 0 & !isCrossing & v7 = crossedStatus -> (v8' = crossingStatus) & (isCrossing' = true);
+    [] v8 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing & v7 = crossedStatus -> (v8' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v8 = crossingStatus & nonThroughQueue > 0 -> (v8' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+module Vehicle9
+
+    v9 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v9 = runningStatus & nonThroughQueue < maxQueueSize -> (v9' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v9 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing & v8 = crossedStatus -> (v9' = crossingStatus) & (isCrossing' = true);
+    [] v9 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing & v8 = crossedStatus -> (v9' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [] v9 = approachingStatus & ((isCrossing & v8 = crossedStatus) | (v8 = stoppedStatus | v8 = crossingStatus)) -> (v9' = stoppedStatus);
+
+    // Entering transition
+    [] v9 = stoppedStatus & mode = 0 & !isCrossing & v8 = crossedStatus -> (v9' = crossingStatus) & (isCrossing' = true);
+    [] v9 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing & v8 = crossedStatus -> (v9' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v9 = crossingStatus & nonThroughQueue > 0 -> (v9' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+module Vehicle10
+
+    v10 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v10 = runningStatus & nonThroughQueue < maxQueueSize -> (v10' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v10 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing & v9 = crossedStatus -> (v10' = crossingStatus) & (isCrossing' = true);
+    [] v10 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing & v9 = crossedStatus -> (v10' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [] v10 = approachingStatus & ((isCrossing & v9 = crossedStatus) | (v9 = stoppedStatus | v9 = crossingStatus)) -> (v10' = stoppedStatus);
+
+    // Entering transition
+    [] v10 = stoppedStatus & mode = 0 & !isCrossing & v9 = crossedStatus -> (v10' = crossingStatus) & (isCrossing' = true);
+    [] v10 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing & v9 = crossedStatus -> (v10' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v10 = crossingStatus & nonThroughQueue > 0 -> (v10' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+// Last vehicle on non-through lanes
+module Vehicle11
+
+    v11 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v11 = runningStatus & nonThroughQueue < maxQueueSize -> (v11' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v11 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing & v10 = crossedStatus -> (v11' = crossingStatus) & (isCrossing' = true);
+    [] v11 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing & v10 = crossedStatus -> (v11' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [stopped2] v11 = approachingStatus & ((isCrossing & v10 = crossedStatus) | (v10 = stoppedStatus | v10 = crossingStatus)) -> (v11' = stoppedStatus);
+
+    // Entering transition
+    [] v11 = stoppedStatus & mode = 0 & !isCrossing & v10 = crossedStatus -> (v11' = crossingStatus) & (isCrossing' = true);
+    [] v11 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing & v10 = crossedStatus -> (v11' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v11 = crossingStatus & nonThroughQueue > 0 -> (v11' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+// Dummy vehicle module
+module DummyVehicle
+
+    v12 : [0..7] init unspaceStatus;
+
+    // Randomly choose a position in the through queue + 1 for dummy vehicle
+    [] dummyFirst & v12 = unspaceStatus & throughQueue < maxQueueSize -> 1/4 : (dPos' = 1) & (v12' = spaceStatus) & (throughQueue' = throughQueue + 1) & (dummyFirst' = false) + 1/4 : (dPos' = 2) & (v12' = spaceStatus) & (throughQueue' = throughQueue + 1) & (dummyFirst' = false) + 1/4 : (dPos' = 3) & (v12' = spaceStatus) & (throughQueue' = throughQueue + 1) & (dummyFirst' = false) + 1/4 : (dPos' = 4) & (v12' = spaceStatus) & (throughQueue' = throughQueue + 1) & (dummyFirst' = false);
+
+    [] v12 = spaceStatus & dPos = 1 & (v0 = crossingStatus | v0 = stoppedStatus | v0 = crossedStatus) & throughQueue > 0 & CountPos < 9  ->
+            (v12' = yieldStatus) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+    [] v12 = spaceStatus & dPos = 2 & (v1 = crossingStatus | v1 = stoppedStatus | v1 = crossedStatus) & throughQueue > 0 & CountPos < 9  ->
+            (v12' = yieldStatus) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+    [] v12 = spaceStatus & dPos = 3 & (v2 = crossingStatus | v2 = stoppedStatus | v2 = crossedStatus) & throughQueue > 0 & CountPos < 9  ->
+            (v12' = yieldStatus) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+    [] v12 = spaceStatus & dPos = 4 & (v3 = crossingStatus | v3 = stoppedStatus | v3 = crossedStatus) & throughQueue > 0 & CountPos < 9  ->
+            (v12' = yieldStatus) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+
+endmodule
+
+// Control module for mode based on congestion
+module Control
+
+    [] throughQueue >= congestionThreshold -> (mode' = 1);
+    [] throughQueue < congestionThreshold -> (mode' = 0);
+    [] mode = 1 & turn = 1 & nonThroughQueue = 0 -> (turn' = 0);
+    [] mode = 1 & turn = 0 & throughQueue = 0 -> (turn' = 1);
+
+endmodule
+
+// Rewards structure for time spent in waiting states (approaching and stopped)
+rewards "waiting_time_first" //waiting time for first non-through lane vehicle
+    [stopped] true : 1;
+endrewards
+
+rewards "waiting_time_last" //waiting time for last non-through lane vehicle
+    [stopped2] true : 1;
+endrewards
+
+// Property Specification
+label "simultaneous_crossing" = (v0 = crossingStatus & v1 = crossingStatus) | (v0 = crossingStatus & v2 = crossingStatus) | (v0 = crossingStatus & v3 = crossingStatus) | (v0 = crossingStatus & v4 = crossingStatus) | (v0 = crossingStatus & v5 = crossingStatus) | (v0 = crossingStatus & v6 = crossingStatus) | (v0 = crossingStatus & v7 = crossingStatus) | (v0 = crossingStatus & v8 = crossingStatus) | (v0 = crossingStatus & v9 = crossingStatus) | (v0 = crossingStatus & v10 = crossingStatus) | (v0 = crossingStatus & v11 = crossingStatus) | (v1 = crossingStatus & v2 = crossingStatus) | (v1 = crossingStatus & v3 = crossingStatus) | (v1 = crossingStatus & v4 = crossingStatus) | (v1 = crossingStatus & v5 = crossingStatus) | (v1 = crossingStatus & v6 = crossingStatus) | (v1 = crossingStatus & v7 = crossingStatus) | (v1 = crossingStatus & v8 = crossingStatus) | (v1 = crossingStatus & v9 = crossingStatus) | (v1 = crossingStatus & v10 = crossingStatus) | (v1 = crossingStatus & v11 = crossingStatus) | (v2 = crossingStatus & v3 = crossingStatus) | (v2 = crossingStatus & v4 = crossingStatus) | (v2 = crossingStatus & v5 = crossingStatus) | (v2 = crossingStatus & v6 = crossingStatus) | (v2 = crossingStatus & v7 = crossingStatus) | (v2 = crossingStatus & v8 = crossingStatus) | (v2 = crossingStatus & v9 = crossingStatus) | (v2 = crossingStatus & v10 = crossingStatus) | (v2 = crossingStatus & v11 = crossingStatus) | (v3 = crossingStatus & v4 = crossingStatus) | (v3 = crossingStatus & v5 = crossingStatus) | (v3 = crossingStatus & v6 = crossingStatus) | (v3 = crossingStatus & v7 = crossingStatus) | (v3 = crossingStatus & v8 = crossingStatus) | (v3 = crossingStatus & v9 = crossingStatus) | (v3 = crossingStatus & v10 = crossingStatus) | (v3 = crossingStatus & v11 = crossingStatus) | (v4 = crossingStatus & v5 = crossingStatus) | (v4 = crossingStatus & v6 = crossingStatus) | (v4 = crossingStatus & v7 = crossingStatus) | (v4 = crossingStatus & v8 = crossingStatus) | (v4 = crossingStatus & v9 = crossingStatus) | (v4 = crossingStatus & v10 = crossingStatus) | (v4 = crossingStatus & v11 = crossingStatus) | (v5 = crossingStatus & v6 = crossingStatus) | (v5 = crossingStatus & v7 = crossingStatus) | (v5 = crossingStatus & v8 = crossingStatus) | (v5 = crossingStatus & v9 = crossingStatus) | (v5 = crossingStatus & v10 = crossingStatus) | (v5 = crossingStatus & v11 = crossingStatus) | (v6 = crossingStatus & v7 = crossingStatus) | (v6 = crossingStatus & v8 = crossingStatus) | (v6 = crossingStatus & v9 = crossingStatus) | (v6 = crossingStatus & v10 = crossingStatus) | (v6 = crossingStatus & v11 = crossingStatus) | (v7 = crossingStatus & v8 = crossingStatus) | (v7 = crossingStatus & v9 = crossingStatus) | (v7 = crossingStatus & v10 = crossingStatus) | (v7 = crossingStatus & v11 = crossingStatus) | (v8 = crossingStatus & v9 = crossingStatus) | (v8 = crossingStatus & v10 = crossingStatus) | (v8 = crossingStatus & v11 = crossingStatus) | (v9 = crossingStatus & v10 = crossingStatus) | (v9 = crossingStatus & v11 = crossingStatus) | (v10 = crossingStatus & v11 = crossingStatus);
+
+label "termination" = (ucvs = 0);

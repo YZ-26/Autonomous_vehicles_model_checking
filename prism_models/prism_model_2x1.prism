@@ -1,0 +1,134 @@
+dtmc
+
+// Define constants
+const int maxQueueSize = 3;
+const int congestionThreshold = 3;
+
+// Define vehicle statuses as integer values
+const int runningStatus = 0;
+const int approachingStatus = 1;
+const int stoppedStatus = 2;
+const int crossingStatus = 3;
+const int crossedStatus = 4;
+const int unspaceStatus = 5;
+const int spaceStatus = 6;
+const int yieldStatus = 7;
+
+// Global variables for vehicle queues and status flags
+global throughQueue : [0..maxQueueSize] init 1;
+global nonThroughQueue : [0..maxQueueSize] init 0;
+global mode : [0..1] init 0; // 0 = prioritized, 1 = fair
+global isCrossing : bool init false;
+global turn : [0..1] init 0; // 0 = through, 1 = nonThrough
+global dPos : [0..2] init 0; // Dummy vehicle position
+global CountPos : [0..3] init 0; // Number of Through lane cars crossed
+global dummyFirst : bool init true; // Flag to ensure dummy vehicle moves first
+
+// Formula for the total number of vehicles in queues
+formula ucvs = throughQueue + nonThroughQueue;
+
+// First vehicle on through lanes
+module Vehicle0
+
+    v0 : [0..7] init approachingStatus; // Set it to approaching to check for termination label, since we need at least 1 vh in queue
+
+    // Approaching transition
+    // [] !dummyFirst & v0 = runningStatus & throughQueue < maxQueueSize -> (v0' = approachingStatus) & (throughQueue' = throughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] !dummyFirst & v0 = approachingStatus & (mode = 0 | nonThroughQueue = 0) & !isCrossing -> (v0' = crossingStatus) & (isCrossing' = true);
+    [] !dummyFirst & v0 = approachingStatus & ( mode = 1 & turn = 0) & !isCrossing -> (v0' = crossingStatus) & (isCrossing' = true) & (turn' = 1);
+
+    // Stopping transition
+    [] v0 = approachingStatus & isCrossing -> (v0' = stoppedStatus);
+
+    // Entering transition
+    [] v0 = stoppedStatus & mode = 0 & !isCrossing -> (v0' = crossingStatus) & (isCrossing' = true);
+    [] v0 = stoppedStatus & mode = 1 & turn = 0 & !isCrossing -> (v0' = crossingStatus) & (turn' = 1) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v0 = crossingStatus & throughQueue > 0 & CountPos < 3 -> (v0' = crossedStatus) & (isCrossing' = false) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+
+endmodule
+
+module Vehicle1
+
+    v1 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v1 = runningStatus & throughQueue < maxQueueSize -> (v1' = approachingStatus) & (throughQueue' = throughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v1 = approachingStatus & (mode = 0 | nonThroughQueue = 0) & !isCrossing & v0 = crossedStatus -> (v1' = crossingStatus) & (isCrossing' = true);
+    [] v1 = approachingStatus & ( mode = 1 & turn = 0) & !isCrossing & v0 = crossedStatus -> (v1' = crossingStatus) & (isCrossing' = true) & (turn' = 1);
+
+    // Stopping transition
+    [] v1 = approachingStatus & ((v0 = stoppedStatus | v0 = crossingStatus) | (isCrossing & v0 = crossedStatus)) -> (v1' = stoppedStatus);
+
+    // Entering transition
+    [] v1 = stoppedStatus & mode = 0 & !isCrossing & v0 = crossedStatus -> (v1' = crossingStatus) & (isCrossing' = true);
+    [] v1 = stoppedStatus & mode = 1 & turn = 0 & !isCrossing & v0 = crossedStatus -> (v1' = crossingStatus) & (turn' = 1) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v1 = crossingStatus & throughQueue > 0 & CountPos < 3 -> (v1' = crossedStatus) & (isCrossing' = false) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+
+endmodule
+
+// First vehicle on non-through lanes
+module Vehicle2
+
+    v2 : [0..7] init runningStatus;
+
+    // Approaching transition
+    [] !dummyFirst & v2 = runningStatus & nonThroughQueue < maxQueueSize -> (v2' = approachingStatus) & (nonThroughQueue' = nonThroughQueue + 1);
+
+    // Immediate crossing if in prioritized mode and no vehicle is crossing
+    [] v2 = approachingStatus & ((mode = 0 & CountPos+1 = dPos) | throughQueue = 0) & !isCrossing -> (v2' = crossingStatus) & (isCrossing' = true);
+    [] v2 = approachingStatus & ( mode = 1 & turn = 1) & !isCrossing -> (v2' = crossingStatus) & (isCrossing' = true) & (turn' = 0);
+
+    // Stopping transition
+    [stopped] v2 = approachingStatus & isCrossing -> (v2' = stoppedStatus);
+
+    // Entering transition
+    [] v2 = stoppedStatus & mode = 0 & !isCrossing -> (v2' = crossingStatus) & (isCrossing' = true);
+    [] v2 = stoppedStatus & ( mode = 1 & turn = 1 ) & !isCrossing -> (v2' = crossingStatus) & (turn' = 0) & (isCrossing' = true);
+
+    // Exiting transition
+    [] v2 = crossingStatus & nonThroughQueue > 0 -> (v2' = crossedStatus) & (isCrossing' = false) & (nonThroughQueue'=nonThroughQueue-1);
+
+endmodule
+
+// Dummy vehicle module
+module DummyVehicle
+
+    v3 : [0..7] init unspaceStatus;
+
+    // Randomly choose a position in the through queue + 1 for dummy vehicle
+    [] dummyFirst & v3 = unspaceStatus & throughQueue < maxQueueSize -> 1/2 : (dPos' = 1) & (v3' = spaceStatus) & (throughQueue' = throughQueue + 1) & (dummyFirst' = false) + 1/2 : (dPos' = 2) & (v3' = spaceStatus) & (throughQueue' = throughQueue + 1) & (dummyFirst' = false);
+
+    [] v3 = spaceStatus & dPos = 1 & (v0 = crossingStatus | v0 = stoppedStatus | v0 = crossedStatus) & throughQueue > 0 & CountPos < 3  ->
+            (v3' = yieldStatus) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+    [] v3 = spaceStatus & dPos = 2 & (v1 = crossingStatus | v1 = stoppedStatus | v1 = crossedStatus) & throughQueue > 0 & CountPos < 3  ->
+            (v3' = yieldStatus) & (throughQueue' = throughQueue - 1) & (CountPos' = CountPos + 1);
+
+endmodule
+
+// Control module for mode based on congestion
+module Control
+
+    [] throughQueue >= congestionThreshold -> (mode' = 1);
+    [] throughQueue < congestionThreshold -> (mode' = 0);
+    [] mode = 1 & turn = 1 & nonThroughQueue = 0 -> (turn' = 0);
+    [] mode = 1 & turn = 0 & throughQueue = 0 -> (turn' = 1);
+
+endmodule
+
+// Rewards structure for time spent in waiting states (approaching and stopped)
+rewards "waiting_time_first" //waiting time for first non-through lane vehicle
+    [stopped] true : 1;
+endrewards
+
+// Property Specification
+label "simultaneous_crossing" = (v0 = crossingStatus & v1 = crossingStatus) | (v0 = crossingStatus & v2 = crossingStatus) | (v1 = crossingStatus & v2 = crossingStatus);
+
+label "termination" = (ucvs = 0);
